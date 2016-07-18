@@ -8,5 +8,10 @@ namespace mc
 {
     public static class ByteConversion
     {
+
+        public static dynamic ToVarInt(this dynamic value)
+        {
+
+        }
     }
 }
