@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MinecraftClient", "Minecraf
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MinecraftClientGUI", "MinecraftClientGUI\MinecraftClientGUI.csproj", "{B9E600B3-C8F0-4BF8-85E1-C164956B0B0D}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "mc.fpga.parser", "mc.fpga.parser\mc.fpga.parser.fsproj", "{BBC1C9F5-D811-4766-8941-46BF7F68F4DE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -61,6 +63,16 @@ Global
 		{B9E600B3-C8F0-4BF8-85E1-C164956B0B0D}.Release|Mixed Platforms.Build.0 = Release|x86
 		{B9E600B3-C8F0-4BF8-85E1-C164956B0B0D}.Release|x86.ActiveCfg = Release|x86
 		{B9E600B3-C8F0-4BF8-85E1-C164956B0B0D}.Release|x86.Build.0 = Release|x86
+		{BBC1C9F5-D811-4766-8941-46BF7F68F4DE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BBC1C9F5-D811-4766-8941-46BF7F68F4DE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BBC1C9F5-D811-4766-8941-46BF7F68F4DE}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{BBC1C9F5-D811-4766-8941-46BF7F68F4DE}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{BBC1C9F5-D811-4766-8941-46BF7F68F4DE}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{BBC1C9F5-D811-4766-8941-46BF7F68F4DE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BBC1C9F5-D811-4766-8941-46BF7F68F4DE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BBC1C9F5-D811-4766-8941-46BF7F68F4DE}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{BBC1C9F5-D811-4766-8941-46BF7F68F4DE}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{BBC1C9F5-D811-4766-8941-46BF7F68F4DE}.Release|x86.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

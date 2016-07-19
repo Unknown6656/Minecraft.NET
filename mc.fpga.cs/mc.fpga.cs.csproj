@@ -45,6 +45,12 @@
     <Compile Include="Parser.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\mc.fpga.parser\mc.fpga.parser.fsproj">
+      <Project>{bbc1c9f5-d811-4766-8941-46bf7f68f4de}</Project>
+      <Name>mc.fpga.parser</Name>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

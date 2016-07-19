@@ -2,23 +2,33 @@
 
 open System.Text.RegularExpressions
 open System.Collections.Generic
+open System
 
 type uop =
     | NOT | NEG | INC | DEC
 
 type bop =
-    | OR | AND | XOR | SHL | SHR | ROL | ROR | ADD | SUB | MOD | DIV | MUL | POW
-    | EQ | NEQ | LOW | LEQ | GRT | GEQ
+    | OR | AND | XOR | SHL | SHR | ROL | ROR | ADD | SUB | MOD | DIV | MUL | POW | EQ | NEQ | LOW | LEQ | GRT | GEQ
 
 type Field =
     | Port of int
     | Constant of int
     | Variable of string
+    override this.ToString() =
+        match this with
+        | Port(p) -> "$" + p.ToString()
+        | Constant(c) -> c.ToString()
+        | Variable(v) -> v
 
 type Expression =
     | Value of Field
     | UnaryOperation of (uop * Expression)
     | BinaryOperation of (Expression * bop * Expression)
+    override this.ToString() =
+        match this with
+        | Value(f) -> f.ToString()
+        | UnaryOperation(op, x1) -> "(" + op.ToString() + x1.ToString() + ")"
+        | BinaryOperation(x1, op, x2) -> "(" + x1.ToString() + " " + op.ToString() + " " + x2.ToString() + ")"
 
 type Error =
     val Line : int
@@ -27,9 +37,46 @@ type Error =
         Line = l
         Message = m
     }
+    override this.ToString() =
+        sprintf "Error on line %d: '%s'." this.Line this.Message
 
-module parser =
-    let Parse (s : string) : (int[] -> unit) * Error[] =
+module Strings =
+    let UnaryOperator = [|
+            for op in Enum.GetValues(typeof<uop>) |> Seq.cast<uop> do
+                yield (op, match op with
+                            | NOT -> "~"
+                            | NEG -> "-"
+                            | INC -> "++"
+                            | DEC -> "--"
+                            )
+        |]
+    let BinaryOperator = [|
+            for op in Enum.GetValues(typeof<bop>) |> Seq.cast<bop> do
+                yield (op, match op with
+                            | OR -> "|"
+                            | AND -> "&"
+                            | XOR -> "^"
+                            | SHL -> "<<"
+                            | SHR -> ">>"
+                            | ROL -> "<|"
+                            | ROR -> "|>"
+                            | ADD -> "+"
+                            | SUB -> "-"
+                            | MOD -> "%"
+                            | DIV -> "/"
+                            | MUL -> "*"
+                            | POW -> "**"
+                            | EQ -> "="
+                            | NEQ -> "<>"
+                            | LOW -> "<"
+                            | LEQ -> "<="
+                            | GRT -> ">"
+                            | GEQ -> ">="
+                            )
+        |]
+
+module Parser =
+    let Parse (s : string, size : int) : string[] * Error[] =
         let rec binop (x1 : int, op : bop, x2 : int) =
             let inv o = 1 - binop(x1, o, x2)
             match op with
@@ -59,9 +106,6 @@ module parser =
             | NEG -> binop(0, SUB, x1)
             | INC -> binop(x1, ADD, 1)
             | DEC -> binop(x1, SUB, 1)
-        let inline initCollection s =
-            new ^t()
-            |>  Seq.iter (fun (k,v) -> (^t : (member Add : 'a * 'b -> unit) coll, k, v)) s
 //        let procins (i : (int * Operation)[], p : int[]) =
 //            for ins in i do
 //                let n = fst(ins)
@@ -69,17 +113,16 @@ module parser =
 //                          | UnaryOperation(x1, o) -> unop(o, p.[x1])
 //                          | BinaryOperation(x1, o , x2) -> binop(p.[x1], o, p.[x2])
 //                Array.set p n res
-        let mutable func : int[] -> unit = ignore
         let lines = [|
                         for l in s.Split('\r', '\n') do
                             let t = (if l.Contains("#") then l.Remove(l.IndexOf '#') else l).Trim()
                             if t.Length > 0 then yield t
                     |]
-        let error = [|
-                        let vars : Dictionary<string,int> = initCollection []
+        let mutable error = List.Empty
+        let add l e = e::l
+        let oline = [|
                         for i in 0 .. lines.Length do
                             let line = lines.[i].ToLower()
-
                             if line.StartsWith "def " then
                                 // vars.Add ... 0
                                 ()
@@ -89,12 +132,12 @@ module parser =
                                 ()
                             else
                                 if line.Contains "=" then
-                                    let sides = line.Split '='
-                                    
+                                    let left = (line.Split '=').[0].Trim()
+                                    let right = line.Remove(0, line.IndexOf('=') + 1).Trim()
 
+
+                                    ()
                                 else
-                                    yield Error(i, "Expected assignment expression")
+                                    error <- add(error, Error(i, "Expected assignment expression"))
                     |]
-        (func, error)
-    let e : Expression =
-        UnaryOperation()
+        (oline, error |> List.toArray)
