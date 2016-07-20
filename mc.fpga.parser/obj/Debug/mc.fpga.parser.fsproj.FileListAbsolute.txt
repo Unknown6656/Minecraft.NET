@@ -1,0 +1,19 @@
+C:\Users\s_david\Documents\Visual Studio 2013\Projects\fsparser\mc.fpga.parser\bin\Debug\mc.fpga.parser.XML
+C:\Users\s_david\Documents\Visual Studio 2013\Projects\fsparser\mc.fpga.parser\bin\Debug\mc.fpga.parser.dll
+C:\Users\s_david\Documents\Visual Studio 2013\Projects\fsparser\mc.fpga.parser\bin\Debug\mc.fpga.parser.pdb
+C:\Users\s_david\Documents\Visual Studio 2013\Projects\fsparser\mc.fpga.parser\bin\Debug\FSharp.Core.dll
+C:\Users\s_david\Documents\Visual Studio 2013\Projects\fsparser\mc.fpga.parser\bin\Debug\FSharp.Core.xml
+C:\Users\s_david\Documents\Visual Studio 2013\Projects\fsparser\mc.fpga.parser\bin\Debug\de\FSharp.Core.resources.dll
+C:\Users\s_david\Documents\Visual Studio 2013\Projects\fsparser\mc.fpga.parser\obj\Debug\mc.fpga.parser.dll
+C:\Users\s_david\Documents\Visual Studio 2013\Projects\fsparser\mc.fpga.parser\obj\Debug\mc.fpga.parser.pdb
+B:\Projects.VisualStudio\MC FPGA\mc.fpga.parser\bin\Debug\mc.fpga.parser.XML
+B:\Projects.VisualStudio\MC FPGA\mc.fpga.parser\bin\Debug\mc.fpga.parser.dll
+B:\Projects.VisualStudio\MC FPGA\mc.fpga.parser\bin\Debug\mc.fpga.parser.pdb
+B:\Projects.VisualStudio\MC FPGA\mc.fpga.parser\bin\Debug\FSharp.Core.dll
+B:\Projects.VisualStudio\MC FPGA\mc.fpga.parser\bin\Debug\FSharp.Core.xml
+B:\Projects.VisualStudio\MC FPGA\mc.fpga.parser\bin\Debug\de\FSharp.Core.resources.dll
+B:\Projects.VisualStudio\MC FPGA\mc.fpga.parser\obj\Debug\mc.fpga.parser.dll
+B:\Projects.VisualStudio\MC FPGA\mc.fpga.parser\obj\Debug\mc.fpga.parser.pdb
+B:\Projects.VisualStudio\MC FPGA\mc.fpga.parser\obj\Debug\mc.fpga.parser.fsproj.GenerateResource.Cache
+B:\Projects.VisualStudio\MC FPGA\mc.fpga.parser\obj\Debug\resources.resources
+B:\Projects.VisualStudio\MC FPGA\mc.fpga.parser\obj\Debug\mc.fpga.parser.g.resources

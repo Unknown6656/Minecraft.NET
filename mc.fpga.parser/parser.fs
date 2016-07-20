@@ -1,34 +1,16 @@
 ﻿namespace mc.fpga.parser
 
 open System.Text.RegularExpressions
+open Microsoft.FSharp.Reflection
 open System.Collections.Generic
+open System.CodeDom.Compiler
+open System.Globalization
+open System.Reflection
+open System.Resources
+open Microsoft.CSharp
+open System.Text
 open System
 
-type uop =
-    | NOT | NEG | INC | DEC
-
-type bop =
-    | OR | AND | XOR | SHL | SHR | ROL | ROR | ADD | SUB | MOD | DIV | MUL | POW | EQ | NEQ | LOW | LEQ | GRT | GEQ
-
-type Field =
-    | Port of int
-    | Constant of int
-    | Variable of string
-    override this.ToString() =
-        match this with
-        | Port(p) -> "$" + p.ToString()
-        | Constant(c) -> c.ToString()
-        | Variable(v) -> v
-
-type Expression =
-    | Value of Field
-    | UnaryOperation of (uop * Expression)
-    | BinaryOperation of (Expression * bop * Expression)
-    override this.ToString() =
-        match this with
-        | Value(f) -> f.ToString()
-        | UnaryOperation(op, x1) -> "(" + op.ToString() + x1.ToString() + ")"
-        | BinaryOperation(x1, op, x2) -> "(" + x1.ToString() + " " + op.ToString() + " " + x2.ToString() + ")"
 
 type Error =
     val Line : int
@@ -42,102 +24,152 @@ type Error =
 
 module Strings =
     let UnaryOperator = [|
-            for op in Enum.GetValues(typeof<uop>) |> Seq.cast<uop> do
-                yield (op, match op with
-                            | NOT -> "~"
-                            | NEG -> "-"
-                            | INC -> "++"
-                            | DEC -> "--"
-                            )
+            (NOT, "~")
+            (NEG, "-")
         |]
     let BinaryOperator = [|
-            for op in Enum.GetValues(typeof<bop>) |> Seq.cast<bop> do
-                yield (op, match op with
-                            | OR -> "|"
-                            | AND -> "&"
-                            | XOR -> "^"
-                            | SHL -> "<<"
-                            | SHR -> ">>"
-                            | ROL -> "<|"
-                            | ROR -> "|>"
-                            | ADD -> "+"
-                            | SUB -> "-"
-                            | MOD -> "%"
-                            | DIV -> "/"
-                            | MUL -> "*"
-                            | POW -> "**"
-                            | EQ -> "="
-                            | NEQ -> "<>"
-                            | LOW -> "<"
-                            | LEQ -> "<="
-                            | GRT -> ">"
-                            | GEQ -> ">="
-                            )
+            (OR, "|")
+            (AND, "&")
+            (XOR, "^")
+            (SHL, "<<")
+            (SHR, ">>")
+            (ROL, "<|")
+            (ROR, "|>")
+            (ADD, "+")
+            (SUB, "-")
+            (MOD, "%")
+            (DIV, "/")
+            (MUL, "*")
+            (POW, "**")
+            (EQ, "=")
+            (NEQ, "<>")
+            (LOW, "<")
+            (LEQ, "<=")
+            (GRT, ">")
+            (GEQ, ">=")
         |]
+    let GetUnaryOperator s =
+        UnaryOperator
+        |> Array.find (fun e -> snd e = s)
+        |> fst
+    let GetBinaryOperator s =
+        BinaryOperator
+        |> Array.find (fun e -> snd e = s)
+        |> fst
+    let rec StripBraces (s :string) =
+        let st = s.Trim()
+        if st.StartsWith("(") && st.EndsWith(")") then
+            StripBraces st.[1 .. s.Length - 2]
+        else
+            st
+    let (|RegEx|_|) p i =
+        let m = System.Text.RegularExpressions.Regex.Match (i, p)
+        if m.Success then
+            Some m.Groups
+        else
+            None
+    let VariableRegex = "([_a-z]\w*)"
+    let PortRegex = @"(\$[1-9]*[0-9])"
+    let DefineRegex = @"^def\s+(" + VariableRegex + @")$"
+    let OutRegex = @"^def\s+(" + PortRegex + @")$"
+    let InRegex = @"^def\s+(" + PortRegex + @")$"
+    let AssignmentRegex = @"^(?<target>" + PortRegex + "|" + VariableRegex + ")\s*\=\s*(?<expression>.+)$"
+    let ProgramEntry = @"//# ENTRY POINT"
 
-module Parser =
+module Resources =
+    let internal mgnt =
+        new ResourceManager("resources", typeof<Error>.Assembly)
+    let public ProgramFrame =
+        mgnt.GetString("programframe", CultureInfo.InvariantCulture)
+
+type CompilationResult =
+    | Success of Assembly
+    | Failure of Error[]
+    
+type InterpretationResult =
+    | Method of MethodInfo
+    | Errors of Error[]
+
+module Interpreter =
+    let CompileCS (code : string, mainclass) : CompilationResult =
+        let prov = new CSharpCodeProvider()
+        let parm = new CompilerParameters(
+                       IncludeDebugInformation = true,
+                       GenerateExecutable = true,
+                       GenerateInMemory = true,
+                       MainClass = mainclass,
+                       CompilerOptions = "/optimize+ /platform:anycpu" // "/debug"
+                   )
+        parm.ReferencedAssemblies.AddRange [| "mscorlib.dll"; "System.dll"; "System.Data.dll" |]
+        let res = prov.CompileAssemblyFromSource(parm, code)
+        if res.Errors.HasErrors then
+            Failure [|
+                        for e in res.Errors do
+                            if not e.IsWarning then
+                                yield Error(e.Line, e.ErrorText)
+                    |]
+        else
+            Success res.CompiledAssembly
+
     let Parse (s : string, size : int) : string[] * Error[] =
-        let rec binop (x1 : int, op : bop, x2 : int) =
-            let inv o = 1 - binop(x1, o, x2)
-            match op with
-            | AND -> x1 &&& x2
-            | OR -> x1 ||| x2
-            | XOR -> x1 ^^^ x2
-            | SHL -> x1 <<< x2
-            | SHR -> x1 >>> x2
-            | ROL -> (x1 <<< x2) ||| (x1 >>> (32 - x2))
-            | ROR -> (x1 >>> x2) ||| (x1 <<< (32 - x2))
-            | ADD -> x1 + x2
-            | SUB -> x1 - x2
-            | MUL -> x1 * x2
-            | DIV -> x1 / x2
-            | MOD -> x1 % x2
-            | POW -> float(x1) ** float(x2)
-                     |> int
-            | EQ -> if x1 = x2 then 1 else 0
-            | LOW -> if x1 < x2 then 1 else 0
-            | GRT -> if x1 > x2 then 1 else 0
-            | NEQ -> inv EQ
-            | GEQ -> inv LOW
-            | LEQ -> inv GRT
-        let unop (op : uop, x1) =
-            match op with
-            | NOT -> ~~~x1
-            | NEG -> binop(0, SUB, x1)
-            | INC -> binop(x1, ADD, 1)
-            | DEC -> binop(x1, SUB, 1)
-//        let procins (i : (int * Operation)[], p : int[]) =
-//            for ins in i do
-//                let n = fst(ins)
-//                let res = match snd(ins) with
-//                          | UnaryOperation(x1, o) -> unop(o, p.[x1])
-//                          | BinaryOperation(x1, o , x2) -> binop(p.[x1], o, p.[x2])
-//                Array.set p n res
+        let error = new List<Error>()
         let lines = [|
                         for l in s.Split('\r', '\n') do
                             let t = (if l.Contains("#") then l.Remove(l.IndexOf '#') else l).Trim()
                             if t.Length > 0 then yield t
                     |]
-        let mutable error = List.Empty
-        let add l e = e::l
         let oline = [|
                         for i in 0 .. lines.Length do
                             let line = lines.[i].ToLower()
-                            if line.StartsWith "def " then
-                                // vars.Add ... 0
+                            match line with
+                            | Strings.RegEx Strings.DefineRegex g ->
+                                yield "int " + g.ToString() + " = 0;"
+//                            | Strings.RegEx Strings.OutRegex g -> ()
+//                            | Strings.RegEx Strings.InRegex g -> ()
+                            | Strings.RegEx Strings.AssignmentRegex g ->
+                                let targ = g.["target"].ToString()
+                                let expr = g.["expression"].ToString()
+
+
                                 ()
-                            else if line.StartsWith "in " then
-                                ()
-                            else if line.StartsWith "out " then
-                                ()
-                            else
+                            |_ ->
                                 if line.Contains "=" then
-                                    let left = (line.Split '=').[0].Trim()
-                                    let right = line.Remove(0, line.IndexOf('=') + 1).Trim()
-
-
-                                    ()
+                                    Error(i, "Expected assignment expression") |> error.Add
                                 else
-                                    error <- add(error, Error(i, "Expected assignment expression"))
+                                    Error(i, "The line `" + line + "` could not be interpreted") |> error.Add
                     |]
-        (oline, error |> List.toArray)
+        (oline, error |> Seq.toArray)
+
+    let InterpreteFPGAL (code : string, size : int) : InterpretationResult =
+        let res = Parse(code, size)
+        let err = snd res
+        if err.Length > 0 then
+            Errors err
+        else
+            let cscode = [
+                            let pfrm = Resources.ProgramFrame
+                            let offs = pfrm.IndexOf(Strings.ProgramEntry)
+                            yield pfrm.[0 .. offs]
+                            for line in fst res -> line
+                            yield pfrm.[offs + Strings.ProgramEntry.Length .. pfrm.Length - 1]
+                         ]
+                         |> List.fold (+) ""
+            match CompileCS(cscode, "FPGAL.Program") with
+            | Success a -> Method(a.GetType("FPGAL.Program").GetMethod("Process", BindingFlags.Static + BindingFlags.Public))
+            | Failure f -> Errors f
+
+module Test =
+    let testun op x1 =
+        let uop = Strings.GetUnaryOperator op
+        x1
+        |> Int32.Parse
+        |> uop.Calculate
+    let testbin x1 op x2 =
+        let bop = Strings.GetBinaryOperator op
+        bop.Calculate(Int32.Parse(x1), Int32.Parse(x2))
+
+
+
+    let testbinw (s : string) =
+        s
+        

@@ -1,0 +1,18 @@
+C:\Users\s_david\Documents\Visual Studio 2013\Projects\fsparser\test methods\bin\Debug\test methods.exe.config
+C:\Users\s_david\Documents\Visual Studio 2013\Projects\fsparser\test methods\obj\Debug\test methods.csprojResolveAssemblyReference.cache
+C:\Users\s_david\Documents\Visual Studio 2013\Projects\fsparser\test methods\bin\Debug\test methods.exe
+C:\Users\s_david\Documents\Visual Studio 2013\Projects\fsparser\test methods\bin\Debug\test methods.pdb
+C:\Users\s_david\Documents\Visual Studio 2013\Projects\fsparser\test methods\bin\Debug\mc.fpga.parser.dll
+C:\Users\s_david\Documents\Visual Studio 2013\Projects\fsparser\test methods\bin\Debug\mc.fpga.parser.pdb
+C:\Users\s_david\Documents\Visual Studio 2013\Projects\fsparser\test methods\bin\Debug\mc.fpga.parser.xml
+C:\Users\s_david\Documents\Visual Studio 2013\Projects\fsparser\test methods\obj\Debug\test methods.exe
+C:\Users\s_david\Documents\Visual Studio 2013\Projects\fsparser\test methods\obj\Debug\test methods.pdb
+B:\Projects.VisualStudio\MC FPGA\test methods\bin\Debug\test methods.exe.config
+B:\Projects.VisualStudio\MC FPGA\test methods\obj\Debug\test methods.exe
+B:\Projects.VisualStudio\MC FPGA\test methods\obj\Debug\test methods.pdb
+B:\Projects.VisualStudio\MC FPGA\test methods\bin\Debug\test methods.exe
+B:\Projects.VisualStudio\MC FPGA\test methods\bin\Debug\test methods.pdb
+B:\Projects.VisualStudio\MC FPGA\test methods\bin\Debug\mc.fpga.parser.dll
+B:\Projects.VisualStudio\MC FPGA\test methods\bin\Debug\mc.fpga.parser.pdb
+B:\Projects.VisualStudio\MC FPGA\test methods\bin\Debug\mc.fpga.parser.xml
+B:\Projects.VisualStudio\MC FPGA\test methods\obj\Debug\test methods.csprojResolveAssemblyReference.cache
