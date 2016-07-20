@@ -46,6 +46,11 @@ type Field =
         | Port(p) -> "$" + p.ToString()
         | Constant(c) -> c.ToString()
         | Variable(v) -> v
+    member this.ToCSString() =
+        match this with
+        | Port(p) -> "ports[" + p.ToString() + "]"
+        | Constant(c) -> "(" + c.ToString() + ")"
+        | Variable(v) -> "variables[\"__var" + v + "\"]" 
 
 type Expression =
     | Value of Field

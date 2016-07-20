@@ -24,7 +24,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <WarningLevel>3</WarningLevel>
     <DocumentationFile>bin\Debug\mc.fpga.parser.XML</DocumentationFile>
-    <OtherFlags>--resource:resources.resx</OtherFlags>
+    <OtherFlags>--resource:resources.resx --sig:$(OutputPath)\header.fsi</OtherFlags>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -52,13 +52,14 @@
   </Choose>
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
-    <Compile Include="syntaxnodes.fs" />
-    <Compile Include="parser.fs" />
-    <None Include="Script.fsx" />
-    <Resource Include="programframe.cs" />
     <EmbeddedResource Include="resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
     </EmbeddedResource>
+    <Content Include="header.fsi" />
+    <None Include="Script.fsx" />
+    <Compile Include="syntaxnodes.fs" />
+    <Compile Include="parser.fs" />
+    <Resource Include="programframe.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Microsoft.CSharp" />

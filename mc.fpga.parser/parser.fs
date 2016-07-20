@@ -11,6 +11,11 @@ open Microsoft.CSharp
 open System.Text
 open System
 
+type ParsingError =
+    | InvalidVariableString
+    | AssginmentExpressionExpected
+    | VariableAlreadyDefined
+    | InvalidAssignment
 
 type Error =
     val Line : int
@@ -18,6 +23,14 @@ type Error =
     new(l, m) = {
         Line = l
         Message = m
+    }
+    new(l, p : ParsingError) = {
+        Line = l
+        Message = match p with
+                  | InvalidVariableString -> "The given variable string is invalid"
+                  | VariableAlreadyDefined -> "The variable has already been defined"
+                  | AssginmentExpressionExpected -> "Expected an assignment expression"
+                  | InvalidAssignment -> "The assignment of a value to a constant is not valid"
     }
     override this.ToString() =
         sprintf "Error on line %d: '%s'." this.Line this.Message
@@ -68,19 +81,24 @@ module Strings =
             Some m.Groups
         else
             None
+    let ConstantRegex = @"(\-?([0-9]+|[0-9a-f]+h))"
     let VariableRegex = "([_a-z]\w*)"
     let PortRegex = @"(\$[1-9]*[0-9])"
     let DefineRegex = @"^def\s+(" + VariableRegex + @")$"
     let OutRegex = @"^def\s+(" + PortRegex + @")$"
     let InRegex = @"^def\s+(" + PortRegex + @")$"
     let AssignmentRegex = @"^(?<target>" + PortRegex + "|" + VariableRegex + ")\s*\=\s*(?<expression>.+)$"
-    let ProgramEntry = @"//# ENTRY POINT"
+    let EntryPoint = [| "FPGAL.Program"; "Process" |]
 
 module Resources =
     let internal mgnt =
         new ResourceManager("resources", typeof<Error>.Assembly)
     let public ProgramFrame =
         mgnt.GetString("programframe", CultureInfo.InvariantCulture)
+
+type ParsingResult<'a> =
+    | Success of 'a
+    | Failure of ParsingError
 
 type CompilationResult =
     | Success of Assembly
@@ -91,6 +109,71 @@ type InterpretationResult =
     | Errors of Error[]
 
 module Interpreter =
+    let ParseVariabe (s : ParsingResult<string>) : ParsingResult<Field> =
+        let suc = ParsingResult.Success
+        let err = ParsingResult.Failure
+        match s with
+        | ParsingResult.Success(s) ->
+            match s with
+            | Strings.RegEx Strings.VariableRegex g -> suc(Field.Variable(g.[1].ToString()))
+            | Strings.RegEx Strings.PortRegex g -> suc(Field.Port(Int32.Parse(g.[1].ToString().Remove(0, 1))))
+            | Strings.RegEx Strings.ConstantRegex g ->
+                                                    let c = g.[1].ToString().ToLower()
+                                                    if c.EndsWith "h" then
+                                                        suc(Field.Constant(Int32.Parse(c.[0 .. c.Length - 2], NumberStyles.HexNumber + NumberStyles.AllowLeadingSign)))
+                                                    else
+                                                        suc(Field.Constant(Int32.Parse c))
+            | _ -> err InvalidVariableString
+        | ParsingResult.Failure(m) -> err m
+
+    let Parse (s : string, size : int) : string[] * Error[] =
+        let error = new List<Error>()
+        let vars = new List<String>()
+        let lines = [|
+                        for l in s.Split('\r', '\n') do
+                            let t = (if l.Contains("#") then l.Remove(l.IndexOf '#') else l).Trim()
+                            if t.Length > 0 then yield t
+                    |]
+        let oline = [|
+                        let suc = ParsingResult.Success
+                        for i in 0 .. lines.Length do
+                            let line = lines.[i].ToLower()
+                            match line with
+                            | Strings.RegEx Strings.DefineRegex g ->
+                                let var = g.ToString()
+                                if vars.Contains var then
+                                    Error(i, VariableAlreadyDefined) |> error.Add
+                                else
+                                    vars.Add var
+                                    yield "variables.Add(\"__var" + var + "\", 0)"
+                            | Strings.RegEx Strings.OutRegex g -> () // TODO
+                            | Strings.RegEx Strings.InRegex g -> () // TODO
+                            | Strings.RegEx Strings.AssignmentRegex g ->
+                                let expr = Strings.StripBraces(g.["expression"].ToString())
+                                let code = null
+
+
+                                // EVAL EXPRESSION
+
+
+                                let targp = g.["target"].ToString()
+                                            |> suc
+                                            |> ParseVariabe
+                                match targp with
+                                | ParsingResult.Failure f -> Error(i, f) |> error.Add
+                                | ParsingResult.Success m ->
+                                    match m with
+                                    | Constant c -> Error(i, InvalidAssignment) |> error.Add
+                                    | _ -> yield m.ToCSString() + " = (int)(" + code + ");"
+                                ()
+                            |_ ->
+                                if line.Contains "=" then
+                                    Error(i, AssginmentExpressionExpected) |> error.Add
+                                else
+                                    Error(i, "The statement `" + line + "` could not be interpreted") |> error.Add
+                    |]
+        (oline, error |> Seq.toArray)
+        
     let CompileCS (code : string, mainclass) : CompilationResult =
         let prov = new CSharpCodeProvider()
         let parm = new CompilerParameters(
@@ -111,51 +194,27 @@ module Interpreter =
         else
             Success res.CompiledAssembly
 
-    let Parse (s : string, size : int) : string[] * Error[] =
-        let error = new List<Error>()
-        let lines = [|
-                        for l in s.Split('\r', '\n') do
-                            let t = (if l.Contains("#") then l.Remove(l.IndexOf '#') else l).Trim()
-                            if t.Length > 0 then yield t
-                    |]
-        let oline = [|
-                        for i in 0 .. lines.Length do
-                            let line = lines.[i].ToLower()
-                            match line with
-                            | Strings.RegEx Strings.DefineRegex g ->
-                                yield "int " + g.ToString() + " = 0;"
-//                            | Strings.RegEx Strings.OutRegex g -> ()
-//                            | Strings.RegEx Strings.InRegex g -> ()
-                            | Strings.RegEx Strings.AssignmentRegex g ->
-                                let targ = g.["target"].ToString()
-                                let expr = g.["expression"].ToString()
-
-
-                                ()
-                            |_ ->
-                                if line.Contains "=" then
-                                    Error(i, "Expected assignment expression") |> error.Add
-                                else
-                                    Error(i, "The line `" + line + "` could not be interpreted") |> error.Add
-                    |]
-        (oline, error |> Seq.toArray)
-
     let InterpreteFPGAL (code : string, size : int) : InterpretationResult =
+        let ident = new String('\t', 5)
         let res = Parse(code, size)
         let err = snd res
         if err.Length > 0 then
             Errors err
         else
             let cscode = [
+                            let cls = Strings.EntryPoint.[0].Split('.')
                             let pfrm = Resources.ProgramFrame
-                            let offs = pfrm.IndexOf(Strings.ProgramEntry)
+                                                .Replace("__NAMESPACE__", cls.[0])
+                                                .Replace("__CLASS__", cls.[1])
+                                                .Replace("__METHOD__", Strings.EntryPoint.[1])
+                            let offs = pfrm.IndexOf("/*__ENTRYPOINT__*/")
                             yield pfrm.[0 .. offs]
-                            for line in fst res -> line
-                            yield pfrm.[offs + Strings.ProgramEntry.Length .. pfrm.Length - 1]
+                            for line in fst res -> ident + line
+                            yield pfrm.[offs + "/*__ENTRYPOINT__*/".Length .. pfrm.Length - 1]
                          ]
                          |> List.fold (+) ""
-            match CompileCS(cscode, "FPGAL.Program") with
-            | Success a -> Method(a.GetType("FPGAL.Program").GetMethod("Process", BindingFlags.Static + BindingFlags.Public))
+            match CompileCS(cscode, Strings.EntryPoint.[0]) with
+            | Success a -> Method(a.GetType(Strings.EntryPoint.[0]).GetMethod(Strings.EntryPoint.[1], BindingFlags.Static + BindingFlags.Public))
             | Failure f -> Errors f
 
 module Test =
@@ -164,11 +223,10 @@ module Test =
         x1
         |> Int32.Parse
         |> uop.Calculate
+
     let testbin x1 op x2 =
         let bop = Strings.GetBinaryOperator op
         bop.Calculate(Int32.Parse(x1), Int32.Parse(x2))
-
-
 
     let testbinw (s : string) =
         s
