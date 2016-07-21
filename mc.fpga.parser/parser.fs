@@ -1,4 +1,9 @@
-﻿namespace mc.fpga.parser
+﻿#if INTERACTIVE
+    #load "header.fsi"
+    #load "syntaxnodes.fs"
+#endif
+
+namespace mc.fpga.parser
 
 open System.Text.RegularExpressions
 open Microsoft.FSharp.Reflection
@@ -16,6 +21,10 @@ type ParsingError =
     | AssginmentExpressionExpected
     | VariableAlreadyDefined
     | InvalidAssignment
+    | InvalidBracesCount
+    | NotAConstantExpression
+    | InvalidNumberFormat
+    | InvalidExpression
 
 type Error =
     val Line : int
@@ -31,6 +40,10 @@ type Error =
                   | VariableAlreadyDefined -> "The variable has already been defined"
                   | AssginmentExpressionExpected -> "Expected an assignment expression"
                   | InvalidAssignment -> "The assignment of a value to a constant is not valid"
+                  | InvalidBracesCount -> "The count of the braces `(` and `)` must be equal"
+                  | NotAConstantExpression -> "The given expression is not constant"
+                  | InvalidNumberFormat -> "The given string could not be parsed as number"
+                  | InvalidExpression -> "The expression is invalid"
     }
     override this.ToString() =
         sprintf "Error on line %d: '%s'." this.Line this.Message
@@ -39,6 +52,7 @@ module Strings =
     let UnaryOperator = [|
             (NOT, "~")
             (NEG, "-")
+            (BNOT, "!")
         |]
     let BinaryOperator = [|
             (OR, "|")
@@ -81,13 +95,20 @@ module Strings =
             Some m.Groups
         else
             None
-    let ConstantRegex = @"(\-?([0-9]+|[0-9a-f]+h))"
     let VariableRegex = "([_a-z]\w*)"
     let PortRegex = @"(\$[1-9]*[0-9])"
+    let ConstantRegex = @"(\-?([0-9]+|[0-9a-f]+h))"
+    let FieldRegex = sprintf "(%s|%s|%s)" ConstantRegex VariableRegex PortRegex
+//    let InRegex = @"^in\s+(" + PortRegex + @")$"
+//    let OutRegex = @"^out\s+(" + PortRegex + @")$"
     let DefineRegex = @"^def\s+(" + VariableRegex + @")$"
-    let OutRegex = @"^def\s+(" + PortRegex + @")$"
-    let InRegex = @"^def\s+(" + PortRegex + @")$"
-    let AssignmentRegex = @"^(?<target>" + PortRegex + "|" + VariableRegex + ")\s*\=\s*(?<expression>.+)$"
+    let AssignmentRegex = @"^(?<target>" + PortRegex + "|" + VariableRegex + @")\s*\=\s*(?<expression>.+)$"
+    let UnaryOperatorRegex = @"(?<operator>[~\-\!])"
+    let BinaryOperatorRegex = @"(?<operator>(\<=|\>=|=|\<\>|\&|\^|\<\<|\>\>|\|\>|\<\||\+|-|\||\*\*|\*|\<|\>|\/|%))"
+    let UnaryOperationRegex = UnaryOperatorRegex + @"\s*((?<x>" + FieldRegex + @"|\(.+\))|\((?<x>" + FieldRegex + @"|\(.+\))\))"
+    let internal binx = @"(?<x>" + FieldRegex + @"|\(.+\))"
+    let internal biny = @"(?<y>" + FieldRegex + @"|\(.+\))"
+    let BinaryOperationRegex = @"(\(" + binx + @"\)|" + binx + ")\s*" + BinaryOperatorRegex + @"\s*(\(" + biny + @"\)|" + biny + ")"
     let EntryPoint = [| "FPGAL.Program"; "Process" |]
 
 module Resources =
@@ -95,6 +116,10 @@ module Resources =
         new ResourceManager("resources", typeof<Error>.Assembly)
     let public ProgramFrame =
         mgnt.GetString("programframe", CultureInfo.InvariantCulture)
+        
+type ConstantProcessingResult =
+    | Success of int
+    | Failure of ParsingError
 
 type ParsingResult<'a> =
     | Success of 'a
@@ -109,68 +134,113 @@ type InterpretationResult =
     | Errors of Error[]
 
 module Interpreter =
-    let ParseVariabe (s : ParsingResult<string>) : ParsingResult<Field> =
+    let internal enc s = "^\s*" + s + "\s*$"
+
+    let ProcessContstant (c : ConstantOperation) =
+        match c with
+        | UnaryContantOperation (o, x1) ->
+            match x1 with
+            | Constant c -> ConstantProcessingResult.Success(o.Calculate c)
+            | _ -> ConstantProcessingResult.Failure NotAConstantExpression
+        | BinaryContantOperation (x1, o, x2) ->
+            match (x1, x2) with
+            | (Constant c1, Constant c2) -> ConstantProcessingResult.Success(o.Calculate(c1, c2))
+            | _ -> ConstantProcessingResult.Failure NotAConstantExpression
+
+    let ParseVariabe (s : ParsingResult<string>, b : bool) : ParsingResult<Field> =
         let suc = ParsingResult.Success
         let err = ParsingResult.Failure
+        let penc = if b then enc else fun s -> s
         match s with
-        | ParsingResult.Success(s) ->
-            match s with
-            | Strings.RegEx Strings.VariableRegex g -> suc(Field.Variable(g.[1].ToString()))
-            | Strings.RegEx Strings.PortRegex g -> suc(Field.Port(Int32.Parse(g.[1].ToString().Remove(0, 1))))
-            | Strings.RegEx Strings.ConstantRegex g ->
-                                                    let c = g.[1].ToString().ToLower()
-                                                    if c.EndsWith "h" then
-                                                        suc(Field.Constant(Int32.Parse(c.[0 .. c.Length - 2], NumberStyles.HexNumber + NumberStyles.AllowLeadingSign)))
-                                                    else
-                                                        suc(Field.Constant(Int32.Parse c))
-            | _ -> err InvalidVariableString
+        | ParsingResult.Success(sr) ->
+            match Strings.StripBraces sr with
+            | Strings.RegEx (penc Strings.VariableRegex) g -> suc(Field.Variable(g.[1].ToString()))
+            | Strings.RegEx (penc Strings.PortRegex) g -> suc(Field.Port(Int32.Parse(g.[1].ToString().Remove(0, 1))))
+            | Strings.RegEx (penc Strings.ConstantRegex) g ->
+                let c = g.[1].ToString().ToLower()
+                if c.EndsWith "h" then
+                    suc(Field.Constant(Int32.Parse(c.[0 .. c.Length - 2], NumberStyles.HexNumber + NumberStyles.AllowLeadingSign)))
+                else
+                    suc(Field.Constant(Int32.Parse c))
+            | _ -> err(InvalidVariableString)
         | ParsingResult.Failure(m) -> err m
+        
+    let ParseVariabeP s = ParseVariabe(s, false)
 
     let Parse (s : string, size : int) : string[] * Error[] =
         let error = new List<Error>()
         let vars = new List<String>()
+        let err i (a : ParsingError) = Error(i + 1, a) |> error.Add
+        let suc = ParsingResult.Success
+        let rec matchcore (s : string) =
+            try
+                let st = s.Trim()
+                match ParseVariabe(suc st, true) with
+                | ParsingResult.Success f -> suc(f.ToCSString())
+                | ParsingResult.Failure f ->
+                    match st with
+                    | Strings.RegEx (enc Strings.BinaryOperationRegex) g ->
+                        let op = g.["operator"].ToString() |> Strings.GetBinaryOperator
+                        let x1 = g.["x"].ToString >> matchcore
+                        let x2 = g.["y"].ToString >> matchcore
+                        match (x1(), x2()) with
+                        | (ParsingResult.Success f1, ParsingResult.Success f2) ->
+                            op.ToCSFString().Replace("§1", f1).Replace("§2", f2)
+                            |> suc
+                        | _ -> ParsingResult.Failure InvalidExpression
+                    | Strings.RegEx (enc Strings.UnaryOperationRegex) g ->
+                        let op = g.["operator"].ToString() |> Strings.GetUnaryOperator
+                        match g.["x"].ToString() |> matchcore with
+                        | ParsingResult.Success f ->
+                            op.ToCSFString().Replace("§1", f)
+                            |> suc
+                        | ParsingResult.Failure f -> ParsingResult.Failure f
+                    | _ -> ParsingResult.Failure InvalidExpression
+            with
+            | _ -> ParsingResult.Failure InvalidExpression
         let lines = [|
                         for l in s.Split('\r', '\n') do
                             let t = (if l.Contains("#") then l.Remove(l.IndexOf '#') else l).Trim()
                             if t.Length > 0 then yield t
                     |]
         let oline = [|
-                        let suc = ParsingResult.Success
-                        for i in 0 .. lines.Length do
+                        let pin = new List<int>()
+                        let pou = new List<int>()
+                        for i in 0 .. lines.Length - 1 do
                             let line = lines.[i].ToLower()
                             match line with
                             | Strings.RegEx Strings.DefineRegex g ->
-                                let var = g.ToString()
+                                let var = g.[1].ToString()
                                 if vars.Contains var then
-                                    Error(i, VariableAlreadyDefined) |> error.Add
+                                    err i VariableAlreadyDefined
                                 else
                                     vars.Add var
-                                    yield "variables.Add(\"__var" + var + "\", 0)"
-                            | Strings.RegEx Strings.OutRegex g -> () // TODO
-                            | Strings.RegEx Strings.InRegex g -> () // TODO
+                                    yield "variables.Add(\"__var" + var + "\", 0);"
                             | Strings.RegEx Strings.AssignmentRegex g ->
-                                let expr = Strings.StripBraces(g.["expression"].ToString())
-                                let code = null
-
-
-                                // EVAL EXPRESSION
-
-
-                                let targp = g.["target"].ToString()
-                                            |> suc
-                                            |> ParseVariabe
-                                match targp with
-                                | ParsingResult.Failure f -> Error(i, f) |> error.Add
-                                | ParsingResult.Success m ->
-                                    match m with
-                                    | Constant c -> Error(i, InvalidAssignment) |> error.Add
-                                    | _ -> yield m.ToCSString() + " = (int)(" + code + ");"
-                                ()
-                            |_ ->
-                                if line.Contains "=" then
-                                    Error(i, AssginmentExpressionExpected) |> error.Add
+                                let expr = g.["expression"].ToString()
+                                let cnt = ref 0
+                                for c in expr do
+                                    match c with
+                                    | '(' -> cnt := !cnt + 1
+                                    | ')' -> cnt := !cnt - 1
+                                    | _ -> ()
+                                if !cnt <> 0 then
+                                    err i InvalidBracesCount
                                 else
-                                    Error(i, "The statement `" + line + "` could not be interpreted") |> error.Add
+                                    match matchcore expr with
+                                    | ParsingResult.Failure f -> err i f
+                                    | ParsingResult.Success code ->
+                                        match g.["target"].ToString()
+                                              |> suc
+                                              |> ParseVariabeP with
+                                        | ParsingResult.Failure f -> err i f
+                                        | ParsingResult.Success m -> match m with
+                                                                     | Constant c -> err i InvalidAssignment
+                                                                     | _ -> yield m.ToCSString() + " = (int)(" + code + ");"
+                            |_ -> if line.Contains "=" then
+                                      err i AssginmentExpressionExpected
+                                  else
+                                      Error(i, "The statement `" + line + "` could not be interpreted") |> error.Add
                     |]
         (oline, error |> Seq.toArray)
         
@@ -178,12 +248,12 @@ module Interpreter =
         let prov = new CSharpCodeProvider()
         let parm = new CompilerParameters(
                        IncludeDebugInformation = true,
-                       GenerateExecutable = true,
+                       GenerateExecutable = false,
                        GenerateInMemory = true,
                        MainClass = mainclass,
                        CompilerOptions = "/optimize+ /platform:anycpu" // "/debug"
-                   )
-        parm.ReferencedAssemblies.AddRange [| "mscorlib.dll"; "System.dll"; "System.Data.dll" |]
+                   ) in
+            parm.ReferencedAssemblies.AddRange [| "mscorlib.dll"; "System.dll"; "System.Data.dll" |]
         let res = prov.CompileAssemblyFromSource(parm, code)
         if res.Errors.HasErrors then
             Failure [|
@@ -194,12 +264,12 @@ module Interpreter =
         else
             Success res.CompiledAssembly
 
-    let InterpreteFPGAL (code : string, size : int) : InterpretationResult =
-        let ident = new String('\t', 5)
+    let InterpreteFPGAL (code : string, size : int) : string * InterpretationResult =
+        let ident = new String(' ', 16)
         let res = Parse(code, size)
         let err = snd res
         if err.Length > 0 then
-            Errors err
+            ("", Errors err)
         else
             let cscode = [
                             let cls = Strings.EntryPoint.[0].Split('.')
@@ -208,14 +278,15 @@ module Interpreter =
                                                 .Replace("__CLASS__", cls.[1])
                                                 .Replace("__METHOD__", Strings.EntryPoint.[1])
                             let offs = pfrm.IndexOf("/*__ENTRYPOINT__*/")
-                            yield pfrm.[0 .. offs]
-                            for line in fst res -> ident + line
+                            yield pfrm.[0 .. offs - 1]
+                            for line in fst res -> ident + line + "\n"
                             yield pfrm.[offs + "/*__ENTRYPOINT__*/".Length .. pfrm.Length - 1]
                          ]
                          |> List.fold (+) ""
-            match CompileCS(cscode, Strings.EntryPoint.[0]) with
-            | Success a -> Method(a.GetType(Strings.EntryPoint.[0]).GetMethod(Strings.EntryPoint.[1], BindingFlags.Static + BindingFlags.Public))
-            | Failure f -> Errors f
+            (cscode, match CompileCS(cscode, Strings.EntryPoint.[0]) with
+                     | Success a -> Method(a.GetType(Strings.EntryPoint.[0]).GetMethod(Strings.EntryPoint.[1], BindingFlags.Static + BindingFlags.Public))
+                     | Failure f -> Errors f
+                     )
 
 module Test =
     let testun op x1 =

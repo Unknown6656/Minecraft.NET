@@ -23,12 +23,16 @@ namespace mc.fpga.parser
     | GEQ
     with
       member Calculate : x1:int * x2:int -> int
+      member ToCSFString : unit -> string
+      member IsBoolean : bool
     end
   type uop =
     | NOT
     | NEG
+    | BNOT
     with
       member Calculate : x1:int -> int
+      member ToCSFString : unit -> string
     end
   type Field =
     | Port of int
@@ -43,8 +47,12 @@ namespace mc.fpga.parser
     | UnaryOperation of (uop * Expression)
     | BinaryOperation of (Expression * bop * Expression)
     with
+      member ToCSString : unit -> string
       override ToString : unit -> string
     end
+  type ConstantOperation =
+    | UnaryContantOperation of uop * Field
+    | BinaryContantOperation of Field * bop * Field
 
 namespace mc.fpga.parser
   type ParsingError =
@@ -52,6 +60,10 @@ namespace mc.fpga.parser
     | AssginmentExpressionExpected
     | VariableAlreadyDefined
     | InvalidAssignment
+    | InvalidBracesCount
+    | NotAConstantExpression
+    | InvalidNumberFormat
+    | InvalidExpression
   type Error =
     class
       new : l:int * m:string -> Error
@@ -69,19 +81,27 @@ namespace mc.fpga.parser
     val ( |RegEx|_| ) :
       p:string ->
         i:string -> System.Text.RegularExpressions.GroupCollection option
-    val ConstantRegex : string
     val VariableRegex : string
     val PortRegex : string
+    val ConstantRegex : string
+    val FieldRegex : string
     val DefineRegex : string
-    val OutRegex : string
-    val InRegex : string
     val AssignmentRegex : string
+    val UnaryOperatorRegex : string
+    val BinaryOperatorRegex : string
+    val UnaryOperationRegex : string
+    val internal binx : string
+    val internal biny : string
+    val BinaryOperationRegex : string
     val EntryPoint : string []
   end
   module Resources = begin
     val internal mgnt : System.Resources.ResourceManager
     val ProgramFrame : string
   end
+  type ConstantProcessingResult =
+    | Success of int
+    | Failure of ParsingError
   type ParsingResult<'a> =
     | Success of 'a
     | Failure of ParsingError
@@ -92,10 +112,14 @@ namespace mc.fpga.parser
     | Method of System.Reflection.MethodInfo
     | Errors of Error []
   module Interpreter = begin
-    val ParseVariabe : s:ParsingResult<string> -> ParsingResult<Field>
+    val internal enc : s:string -> string
+    val ProcessContstant : c:ConstantOperation -> ConstantProcessingResult
+    val ParseVariabe : s:ParsingResult<string> * b:bool -> ParsingResult<Field>
+    val ParseVariabeP : s:ParsingResult<string> -> ParsingResult<Field>
     val Parse : s:string * size:int -> string [] * Error []
     val CompileCS : code:string * mainclass:string -> CompilationResult
-    val InterpreteFPGAL : code:string * size:int -> InterpretationResult
+    val InterpreteFPGAL :
+      code:string * size:int -> string * InterpretationResult
   end
   module Test = begin
     val testun : op:string -> x1:string -> int

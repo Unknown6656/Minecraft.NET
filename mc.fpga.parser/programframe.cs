@@ -5,7 +5,7 @@ namespace __NAMESPACE__
 {
     public static class __CLASS__
     {
-        public static void __METHOD__(int[] ports)
+        public static void __METHOD__(ref int[] ports)
         {
             Dictionary<string, int> variables = new Dictionary<string, int>();
             Func<int, int, int> rol = new Func<int, int, int>((v, o) => {
@@ -18,7 +18,7 @@ namespace __NAMESPACE__
 
             unchecked
             {
-                /*__ENTRYPOINT__*/
+/*__ENTRYPOINT__*/
             }
         }
     }
