@@ -16,6 +16,22 @@ open Microsoft.CSharp
 open System.Text
 open System
 
+[<AutoOpen>]
+module Globals =
+    let inline (|RegEx|_|) p i =
+        let m = System.Text.RegularExpressions.Regex.Match (i, p, RegexOptions.Compiled + RegexOptions.IgnoreCase)
+        if m.Success then
+            Some m.Groups
+        else
+            None
+    let inline (|RegExc|_|) p i =
+        let m = System.Text.RegularExpressions.Regex.Match (i, p, RegexOptions.Compiled)
+        if m.Success then
+            Some m.Groups
+        else
+            None
+    let inline (/??) (x : option<_>) y = if x.IsNone then y else x.Value
+    
 type ParsingError =
     | InvalidVariableString
     | AssginmentExpressionExpected
@@ -89,26 +105,19 @@ module Strings =
             StripBraces st.[1 .. s.Length - 2]
         else
             st
-    let (|RegEx|_|) p i =
-        let m = System.Text.RegularExpressions.Regex.Match (i, p)
-        if m.Success then
-            Some m.Groups
-        else
-            None
-    let VariableRegex = "([_a-z]\w*)"
-    let PortRegex = @"(\$[1-9]*[0-9])"
-    let ConstantRegex = @"(\-?([0-9]+|[0-9a-f]+h))"
+    let VariableRegex = "(\b?[_a-z]\w*\b?)"
+    let PortRegex = @"(\b?\$[1-9]*[0-9])"
+    let ConstantRegex = @"(\-?([0-9]+|[0-9a-f]+h\b?))"
     let FieldRegex = sprintf "(%s|%s|%s)" ConstantRegex VariableRegex PortRegex
 //    let InRegex = @"^in\s+(" + PortRegex + @")$"
 //    let OutRegex = @"^out\s+(" + PortRegex + @")$"
     let DefineRegex = @"^def\s+(" + VariableRegex + @")$"
     let AssignmentRegex = @"^(?<target>" + PortRegex + "|" + VariableRegex + @")\s*\=\s*(?<expression>.+)$"
     let UnaryOperatorRegex = @"(?<operator>[~\-\!])"
-    let BinaryOperatorRegex = @"(?<operator>(\<=|\>=|=|\<\>|\&|\^|\<\<|\>\>|\|\>|\<\||\+|-|\||\*\*|\*|\<|\>|\/|%))"
-    let UnaryOperationRegex = UnaryOperatorRegex + @"\s*((?<x>" + FieldRegex + @"|\(.+\))|\((?<x>" + FieldRegex + @"|\(.+\))\))"
-    let internal binx = @"(?<x>" + FieldRegex + @"|\(.+\))"
-    let internal biny = @"(?<y>" + FieldRegex + @"|\(.+\))"
-    let BinaryOperationRegex = @"(\(" + binx + @"\)|" + binx + ")\s*" + BinaryOperatorRegex + @"\s*(\(" + biny + @"\)|" + biny + ")"
+    let BinaryOperatorRegex = @"(?<operator>(\<=|\>=|=|\<\>|\&|\^|\<\<|\>\>|\|\>|\<\||\+|\-|\||\*\*|\*|\<|\>|\/|%))"
+    let internal bin f = @"(?<" + f + ">(\(.+\)|" + FieldRegex + @"))"
+    let UnaryOperationRegex = UnaryOperatorRegex + @"\s*" + bin("x")
+    let BinaryOperationRegex = bin("x") + @"\s*" + BinaryOperatorRegex + @"\s*" + bin("y")
     let EntryPoint = [| "FPGAL.Program"; "Process" |]
 
 module Resources =
@@ -134,7 +143,7 @@ type InterpretationResult =
     | Errors of Error[]
 
 module Interpreter =
-    let internal enc s = "^\s*" + s + "\s*$"
+    let enc s = "^\s*" + s + "\s*$"
 
     let ProcessContstant (c : ConstantOperation) =
         match c with
@@ -153,16 +162,19 @@ module Interpreter =
         let penc = if b then enc else fun s -> s
         match s with
         | ParsingResult.Success(sr) ->
-            match Strings.StripBraces sr with
-            | Strings.RegEx (penc Strings.VariableRegex) g -> suc(Field.Variable(g.[1].ToString()))
-            | Strings.RegEx (penc Strings.PortRegex) g -> suc(Field.Port(Int32.Parse(g.[1].ToString().Remove(0, 1))))
-            | Strings.RegEx (penc Strings.ConstantRegex) g ->
-                let c = g.[1].ToString().ToLower()
-                if c.EndsWith "h" then
-                    suc(Field.Constant(Int32.Parse(c.[0 .. c.Length - 2], NumberStyles.HexNumber + NumberStyles.AllowLeadingSign)))
-                else
-                    suc(Field.Constant(Int32.Parse c))
-            | _ -> err(InvalidVariableString)
+            try
+                match Strings.StripBraces sr with
+                | RegEx (penc Strings.VariableRegex) g -> suc(Field.Variable(g.[1].ToString()))
+                | RegEx (penc Strings.PortRegex) g -> suc(Field.Port(Int32.Parse(g.[1].ToString().Remove(0, 1))))
+                | RegEx (penc Strings.ConstantRegex) g ->
+                    let c = g.[1].ToString().ToLower()
+                    if c.EndsWith "h" then
+                        suc(Field.Constant(Int32.Parse(c.[0 .. c.Length - 2], NumberStyles.HexNumber + NumberStyles.AllowLeadingSign)))
+                    else
+                        suc(Field.Constant(Int32.Parse c))
+                | _ -> err InvalidVariableString
+            with
+            | ex -> err InvalidVariableString
         | ParsingResult.Failure(m) -> err m
         
     let ParseVariabeP s = ParseVariabe(s, false)
@@ -172,14 +184,30 @@ module Interpreter =
         let vars = new List<String>()
         let err i (a : ParsingError) = Error(i + 1, a) |> error.Add
         let suc = ParsingResult.Success
+        let canstrip (s : string) =
+            if s.StartsWith("(") && s.EndsWith(")") then
+                let cnt = ref 0
+                [|
+                        for c in s.[0 .. s.Length - 2] do
+                            match c with
+                            | '(' -> cnt := !cnt + 1
+                            | ')' -> cnt := !cnt - 1
+                            | _ -> ()
+                            yield !cnt > 0
+                |]
+                |> Array.exists ((=) false)
+                |> not
+            else
+                false
         let rec matchcore (s : string) =
             try
-                let st = s.Trim()
+                let s = s.Trim()
+                let st = if canstrip s then Strings.StripBraces s else s
                 match ParseVariabe(suc st, true) with
                 | ParsingResult.Success f -> suc(f.ToCSString())
                 | ParsingResult.Failure f ->
                     match st with
-                    | Strings.RegEx (enc Strings.BinaryOperationRegex) g ->
+                    | RegEx (enc Strings.BinaryOperationRegex) g ->
                         let op = g.["operator"].ToString() |> Strings.GetBinaryOperator
                         let x1 = g.["x"].ToString >> matchcore
                         let x2 = g.["y"].ToString >> matchcore
@@ -188,7 +216,7 @@ module Interpreter =
                             op.ToCSFString().Replace("§1", f1).Replace("§2", f2)
                             |> suc
                         | _ -> ParsingResult.Failure InvalidExpression
-                    | Strings.RegEx (enc Strings.UnaryOperationRegex) g ->
+                    | RegEx (enc Strings.UnaryOperationRegex) g ->
                         let op = g.["operator"].ToString() |> Strings.GetUnaryOperator
                         match g.["x"].ToString() |> matchcore with
                         | ParsingResult.Success f ->
@@ -209,14 +237,14 @@ module Interpreter =
                         for i in 0 .. lines.Length - 1 do
                             let line = lines.[i].ToLower()
                             match line with
-                            | Strings.RegEx Strings.DefineRegex g ->
+                            | RegEx Strings.DefineRegex g ->
                                 let var = g.[1].ToString()
                                 if vars.Contains var then
                                     err i VariableAlreadyDefined
                                 else
                                     vars.Add var
                                     yield "variables.Add(\"__var" + var + "\", 0);"
-                            | Strings.RegEx Strings.AssignmentRegex g ->
+                            | RegEx Strings.AssignmentRegex g ->
                                 let expr = g.["expression"].ToString()
                                 let cnt = ref 0
                                 for c in expr do
@@ -251,7 +279,7 @@ module Interpreter =
                        GenerateExecutable = false,
                        GenerateInMemory = true,
                        MainClass = mainclass,
-                       CompilerOptions = "/optimize+ /platform:anycpu" // "/debug"
+                       CompilerOptions = "/optimize+ /platform:anycpu /unsafe" // "/debug"
                    ) in
             parm.ReferencedAssemblies.AddRange [| "mscorlib.dll"; "System.dll"; "System.Data.dll" |]
         let res = prov.CompileAssemblyFromSource(parm, code)
@@ -287,18 +315,3 @@ module Interpreter =
                      | Success a -> Method(a.GetType(Strings.EntryPoint.[0]).GetMethod(Strings.EntryPoint.[1], BindingFlags.Static + BindingFlags.Public))
                      | Failure f -> Errors f
                      )
-
-module Test =
-    let testun op x1 =
-        let uop = Strings.GetUnaryOperator op
-        x1
-        |> Int32.Parse
-        |> uop.Calculate
-
-    let testbin x1 op x2 =
-        let bop = Strings.GetBinaryOperator op
-        bop.Calculate(Int32.Parse(x1), Int32.Parse(x2))
-
-    let testbinw (s : string) =
-        s
-        

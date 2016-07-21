@@ -55,6 +55,15 @@ namespace mc.fpga.parser
     | BinaryContantOperation of Field * bop * Field
 
 namespace mc.fpga.parser
+  module Globals = begin
+    val inline ( |RegEx|_| ) :
+      p:string ->
+        i:string -> System.Text.RegularExpressions.GroupCollection option
+    val inline ( |RegExc|_| ) :
+      p:string ->
+        i:string -> System.Text.RegularExpressions.GroupCollection option
+    val inline ( /?? ) : x:'a option -> y:'a -> 'a
+  end
   type ParsingError =
     | InvalidVariableString
     | AssginmentExpressionExpected
@@ -78,9 +87,6 @@ namespace mc.fpga.parser
     val GetUnaryOperator : s:string -> uop
     val GetBinaryOperator : s:string -> bop
     val StripBraces : s:string -> string
-    val ( |RegEx|_| ) :
-      p:string ->
-        i:string -> System.Text.RegularExpressions.GroupCollection option
     val VariableRegex : string
     val PortRegex : string
     val ConstantRegex : string
@@ -89,9 +95,8 @@ namespace mc.fpga.parser
     val AssignmentRegex : string
     val UnaryOperatorRegex : string
     val BinaryOperatorRegex : string
+    val internal bin : f:string -> string
     val UnaryOperationRegex : string
-    val internal binx : string
-    val internal biny : string
     val BinaryOperationRegex : string
     val EntryPoint : string []
   end
@@ -112,7 +117,7 @@ namespace mc.fpga.parser
     | Method of System.Reflection.MethodInfo
     | Errors of Error []
   module Interpreter = begin
-    val internal enc : s:string -> string
+    val enc : s:string -> string
     val ProcessContstant : c:ConstantOperation -> ConstantProcessingResult
     val ParseVariabe : s:ParsingResult<string> * b:bool -> ParsingResult<Field>
     val ParseVariabeP : s:ParsingResult<string> -> ParsingResult<Field>
@@ -120,10 +125,5 @@ namespace mc.fpga.parser
     val CompileCS : code:string * mainclass:string -> CompilationResult
     val InterpreteFPGAL :
       code:string * size:int -> string * InterpretationResult
-  end
-  module Test = begin
-    val testun : op:string -> x1:string -> int
-    val testbin : x1:string -> op:string -> x2:string -> int
-    val testbinw : s:string -> string
   end
 
