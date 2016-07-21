@@ -3,32 +3,6 @@
 
 type bop =
     | OR | AND | XOR | SHL | SHR | ROL | ROR | ADD | SUB | MOD | DIV | MUL | POW | EQ | NEQ | LOW | LEQ | GRT | GEQ
-    member public this.Calculate (x1 : int, x2 : int) =
-        let rec intbinop (x1 : int, op : bop, x2 : int) =
-            let inv o = 1 - intbinop(x1, o, x2)
-            match op with
-            | AND -> x1 &&& x2
-            | OR -> x1 ||| x2
-            | XOR -> x1 ^^^ x2
-            | SHL -> x1 <<< x2
-            | SHR -> x1 >>> x2
-            | ROL -> let o = (32 + x2) % 32
-                     (x1 <<< o) ||| (x1 >>> (32 - o))
-            | ROR -> intbinop(x1, ROL, -x2)
-            | ADD -> x1 + x2
-            | SUB -> x1 - x2
-            | MUL -> x1 * x2
-            | DIV -> x1 / x2
-            | MOD -> x1 % x2
-            | POW -> float(x1) ** float(x2)
-                        |> int
-            | EQ -> if x1 = x2 then 1 else 0
-            | LOW -> if x1 < x2 then 1 else 0
-            | GRT -> if x1 > x2 then 1 else 0
-            | NEQ -> inv EQ
-            | GEQ -> inv LOW
-            | LEQ -> inv GRT
-        intbinop(x1, this, x2)
     member public this.IsBoolean
         with get() =
             match this with
@@ -58,11 +32,6 @@ type bop =
 
 type uop =
     | NOT | NEG | BNOT
-    member public this.Calculate (x1) =
-        match this with
-        | NOT -> ~~~x1
-        | BNOT -> if x1 = 0 then 1 else 0
-        | NEG -> SUB.Calculate(0, x1)
     member this.ToCSFString() =
         match this with
         | BNOT -> "(§1 == 0 ? 1 : 0)"
@@ -104,3 +73,13 @@ type Expression =
 type ConstantOperation =
     | UnaryContantOperation of uop * Field
     | BinaryContantOperation of Field * bop * Field
+    
+type ParsingError =
+    | InvalidVariableString
+    | AssginmentExpressionExpected
+    | VariableAlreadyDefined
+    | InvalidAssignment
+    | InvalidBracesCount
+    | NotAConstantExpression
+    | InvalidNumberFormat
+    | InvalidExpression

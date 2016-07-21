@@ -32,16 +32,6 @@ module Globals =
             None
     let inline (/??) (x : option<_>) y = if x.IsNone then y else x.Value
     
-type ParsingError =
-    | InvalidVariableString
-    | AssginmentExpressionExpected
-    | VariableAlreadyDefined
-    | InvalidAssignment
-    | InvalidBracesCount
-    | NotAConstantExpression
-    | InvalidNumberFormat
-    | InvalidExpression
-
 type Error =
     val Line : int
     val Message : string
@@ -145,17 +135,6 @@ type InterpretationResult =
 module Interpreter =
     let enc s = "^\s*" + s + "\s*$"
 
-    let ProcessContstant (c : ConstantOperation) =
-        match c with
-        | UnaryContantOperation (o, x1) ->
-            match x1 with
-            | Constant c -> ConstantProcessingResult.Success(o.Calculate c)
-            | _ -> ConstantProcessingResult.Failure NotAConstantExpression
-        | BinaryContantOperation (x1, o, x2) ->
-            match (x1, x2) with
-            | (Constant c1, Constant c2) -> ConstantProcessingResult.Success(o.Calculate(c1, c2))
-            | _ -> ConstantProcessingResult.Failure NotAConstantExpression
-
     let ParseVariabe (s : ParsingResult<string>, b : bool) : ParsingResult<Field> =
         let suc = ParsingResult.Success
         let err = ParsingResult.Failure
@@ -180,20 +159,18 @@ module Interpreter =
     let ParseVariabeP s = ParseVariabe(s, false)
 
     let Parse (s : string, size : int) : string[] * Error[] =
-        let error = new List<Error>()
+        let errors = new List<Error>()
         let vars = new List<String>()
-        let err i (a : ParsingError) = Error(i + 1, a) |> error.Add
         let suc = ParsingResult.Success
         let canstrip (s : string) =
             if s.StartsWith("(") && s.EndsWith(")") then
                 let cnt = ref 0
                 [|
-                        for c in s.[0 .. s.Length - 2] do
-                            match c with
-                            | '(' -> cnt := !cnt + 1
-                            | ')' -> cnt := !cnt - 1
-                            | _ -> ()
-                            yield !cnt > 0
+                   for c in s.[0 .. s.Length - 2] do match c with
+                                                     | '(' -> cnt := !cnt + 1
+                                                     | ')' -> cnt := !cnt - 1
+                                                     | _ -> ()
+                                                     yield !cnt > 0
                 |]
                 |> Array.exists ((=) false)
                 |> not
@@ -202,11 +179,11 @@ module Interpreter =
         let rec matchcore (s : string) =
             try
                 let s = s.Trim()
-                let st = if canstrip s then Strings.StripBraces s else s
-                match ParseVariabe(suc st, true) with
+                let s = if canstrip s then Strings.StripBraces s else s
+                match ParseVariabe(suc s, true) with
                 | ParsingResult.Success f -> suc(f.ToCSString())
                 | ParsingResult.Failure f ->
-                    match st with
+                    match s with
                     | RegEx (enc Strings.BinaryOperationRegex) g ->
                         let op = g.["operator"].ToString() |> Strings.GetBinaryOperator
                         let x1 = g.["x"].ToString >> matchcore
@@ -232,8 +209,8 @@ module Interpreter =
                             if t.Length > 0 then yield t
                     |]
         let oline = [|
-                        let pin = new List<int>()
-                        let pou = new List<int>()
+                        let err i (a : ParsingError) = Error(i + 1, a) |> errors.Add
+                        let errm i (m : string) = Error(i + 1, m) |> errors.Add
                         for i in 0 .. lines.Length - 1 do
                             let line = lines.[i].ToLower()
                             match line with
@@ -247,11 +224,10 @@ module Interpreter =
                             | RegEx Strings.AssignmentRegex g ->
                                 let expr = g.["expression"].ToString()
                                 let cnt = ref 0
-                                for c in expr do
-                                    match c with
-                                    | '(' -> cnt := !cnt + 1
-                                    | ')' -> cnt := !cnt - 1
-                                    | _ -> ()
+                                for c in expr do match c with
+                                                 | '(' -> cnt := !cnt + 1
+                                                 | ')' -> cnt := !cnt - 1
+                                                 | _ -> ()
                                 if !cnt <> 0 then
                                     err i InvalidBracesCount
                                 else
@@ -268,9 +244,9 @@ module Interpreter =
                             |_ -> if line.Contains "=" then
                                       err i AssginmentExpressionExpected
                                   else
-                                      Error(i, "The statement `" + line + "` could not be interpreted") |> error.Add
+                                      errm i ("The statement `" + line + "` could not be interpreted")
                     |]
-        (oline, error |> Seq.toArray)
+        (oline, errors |> Seq.toArray)
         
     let CompileCS (code : string, mainclass) : CompilationResult =
         let prov = new CSharpCodeProvider()
