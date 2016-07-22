@@ -90,11 +90,11 @@ module Strings =
         |> Array.find (fun e -> snd e = s)
         |> fst
     let rec StripBraces (s :string) =
-        let st = s.Trim()
-        if st.StartsWith("(") && st.EndsWith(")") then
-            StripBraces st.[1 .. s.Length - 2]
+        let s = s.Trim()
+        if s.StartsWith("(") && s.EndsWith(")") then
+            StripBraces s.[1 .. s.Length - 2]
         else
-            st
+            s
     let VariableRegex = "(\b?[_a-z]\w*\b?)"
     let PortRegex = @"(\b?\$[1-9]*[0-9])"
     let ConstantRegex = @"(\-?([0-9]+|[0-9a-f]+h\b?))"
@@ -131,10 +131,18 @@ type CompilationResult =
 type InterpretationResult =
     | Method of MethodInfo
     | Errors of Error[]
-
+    
+/// <summary>
+/// Represents an MC-FPGAL interpreter
+/// </summary>
 module Interpreter =
     let enc s = "^\s*" + s + "\s*$"
 
+    /// <summary>
+    /// Parses the given string as variable, port or constant
+    /// </summary>
+    /// <param name="s">Variable string</param>
+    /// <param name="b">Flag, which indicates whether the field parsing should be global or not</param>
     let ParseVariabe (s : ParsingResult<string>, b : bool) : ParsingResult<Field> =
         let suc = ParsingResult.Success
         let err = ParsingResult.Failure
@@ -156,8 +164,17 @@ module Interpreter =
             | ex -> err InvalidVariableString
         | ParsingResult.Failure(m) -> err m
         
+    /// <summary>
+    /// Parses the given string as variable, port or constant
+    /// </summary>
+    /// <param name="s">Variable string</param>
     let ParseVariabeP s = ParseVariabe(s, false)
 
+    /// <summary>
+    /// Parses the given MC-FPAL code into C# code
+    /// </summary>
+    /// <param name="s">MC-FPGAL code</param>
+    /// <param name="size">FPGAL size (aka number of pins)</param>
     let Parse (s : string, size : int) : string[] * Error[] =
         let errors = new List<Error>()
         let vars = new List<String>()
@@ -181,7 +198,12 @@ module Interpreter =
                 let s = s.Trim()
                 let s = if canstrip s then Strings.StripBraces s else s
                 match ParseVariabe(suc s, true) with
-                | ParsingResult.Success f -> suc(f.ToCSString())
+                | ParsingResult.Success f -> match f with
+                                             | Port p -> if (p < size) && (p >= 0) then
+                                                            f.ToCSString() |> suc
+                                                         else
+                                                            ParsingResult.Failure InvalidPortNumber
+                                             | _ -> f.ToCSString() |> suc
                 | ParsingResult.Failure f ->
                     match s with
                     | RegEx (enc Strings.BinaryOperationRegex) g ->
@@ -248,13 +270,16 @@ module Interpreter =
                     |]
         (oline, errors |> Seq.toArray)
         
-    let CompileCS (code : string, mainclass) : CompilationResult =
+    /// <summary>
+    /// Compiles the given C# code into a non-executable assembly
+    /// </summary>
+    /// <param name="code">C# code</param>
+    let CompileCS (code : string) : CompilationResult =
         let prov = new CSharpCodeProvider()
         let parm = new CompilerParameters(
                        IncludeDebugInformation = true,
                        GenerateExecutable = false,
                        GenerateInMemory = true,
-                       MainClass = mainclass,
                        CompilerOptions = "/optimize+ /platform:anycpu /unsafe" // "/debug"
                    ) in
             parm.ReferencedAssemblies.AddRange [| "mscorlib.dll"; "System.dll"; "System.Data.dll" |]
@@ -267,7 +292,12 @@ module Interpreter =
                     |]
         else
             Success res.CompiledAssembly
-
+    
+    /// <summary>
+    /// Interpretes the given MC-FPGAL code and compiles it into an invokable method instance
+    /// </summary>
+    /// <param name="code">MC-FPGAL code</param>
+    /// <param name="size">FPGAL size (aka number of pins)</param>
     let InterpreteFPGAL (code : string, size : int) : string * InterpretationResult =
         let ident = new String(' ', 16)
         let res = Parse(code, size)
@@ -281,13 +311,14 @@ module Interpreter =
                                                 .Replace("__NAMESPACE__", cls.[0])
                                                 .Replace("__CLASS__", cls.[1])
                                                 .Replace("__METHOD__", Strings.EntryPoint.[1])
+                                                .Replace("__SIZE__", size.ToString())
                             let offs = pfrm.IndexOf("/*__ENTRYPOINT__*/")
                             yield pfrm.[0 .. offs - 1]
                             for line in fst res -> ident + line + "\n"
                             yield pfrm.[offs + "/*__ENTRYPOINT__*/".Length .. pfrm.Length - 1]
                          ]
                          |> List.fold (+) ""
-            (cscode, match CompileCS(cscode, Strings.EntryPoint.[0]) with
+            (cscode, match CompileCS cscode with
                      | Success a -> Method(a.GetType(Strings.EntryPoint.[0]).GetMethod(Strings.EntryPoint.[1], BindingFlags.Static + BindingFlags.Public))
                      | Failure f -> Errors f
                      )

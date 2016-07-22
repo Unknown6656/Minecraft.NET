@@ -221,35 +221,49 @@
 <member name="">
 
 </member>
-<member name="">
-
-</member>
 <member name="T:mc.fpga.parser.Globals">
 
 </member>
-<member name="">
-
+<member name="M:mc.fpga.parser.Interpreter.InterpreteFPGAL(System.String,System.Int32)">
+ <summary>
+ Interpretes the given MC-FPGAL code and compiles it into an invokable method instance
+ </summary>
+ <param name="code">MC-FPGAL code</param>
+ <param name="size">FPGAL size (aka number of pins)</param>
 </member>
-<member name="">
-
+<member name="M:mc.fpga.parser.Interpreter.CompileCS(System.String)">
+ <summary>
+ Compiles the given C# code into a non-executable assembly
+ </summary>
+ <param name="code">C# code</param>
 </member>
-<member name="">
-
+<member name="M:mc.fpga.parser.Interpreter.Parse(System.String,System.Int32)">
+ <summary>
+ Parses the given MC-FPAL code into C# code
+ </summary>
+ <param name="s">MC-FPGAL code</param>
+ <param name="size">FPGAL size (aka number of pins)</param>
 </member>
-<member name="">
-
+<member name="M:mc.fpga.parser.Interpreter.ParseVariabeP(mc.fpga.parser.ParsingResult{System.String})">
+ <summary>
+ Parses the given string as variable, port or constant
+ </summary>
+ <param name="s">Variable string</param>
 </member>
-<member name="">
-
-</member>
-<member name="">
-
+<member name="M:mc.fpga.parser.Interpreter.ParseVariabe(mc.fpga.parser.ParsingResult{System.String},System.Boolean)">
+ <summary>
+ Parses the given string as variable, port or constant
+ </summary>
+ <param name="s">Variable string</param>
+ <param name="b">Flag, which indicates whether the field parsing should be global or not</param>
 </member>
 <member name="">
 
 </member>
 <member name="T:mc.fpga.parser.Interpreter">
-
+ <summary>
+ Represents an MC-FPGAL interpreter
+ </summary>
 </member>
 <member name="">
 

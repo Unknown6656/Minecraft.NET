@@ -83,3 +83,4 @@ type ParsingError =
     | NotAConstantExpression
     | InvalidNumberFormat
     | InvalidExpression
+    | InvalidPortNumber

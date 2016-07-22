@@ -22,7 +22,6 @@ namespace mc.fpga.parser
     | GRT
     | GEQ
     with
-      member Calculate : x1:int * x2:int -> int
       member ToCSFString : unit -> string
       member IsBoolean : bool
     end
@@ -31,7 +30,6 @@ namespace mc.fpga.parser
     | NEG
     | BNOT
     with
-      member Calculate : x1:int -> int
       member ToCSFString : unit -> string
     end
   type Field =
@@ -53,6 +51,16 @@ namespace mc.fpga.parser
   type ConstantOperation =
     | UnaryContantOperation of uop * Field
     | BinaryContantOperation of Field * bop * Field
+  type ParsingError =
+    | InvalidVariableString
+    | AssginmentExpressionExpected
+    | VariableAlreadyDefined
+    | InvalidAssignment
+    | InvalidBracesCount
+    | NotAConstantExpression
+    | InvalidNumberFormat
+    | InvalidExpression
+    | InvalidPortNumber
 
 namespace mc.fpga.parser
   module Globals = begin
@@ -64,15 +72,6 @@ namespace mc.fpga.parser
         i:string -> System.Text.RegularExpressions.GroupCollection option
     val inline ( /?? ) : x:'a option -> y:'a -> 'a
   end
-  type ParsingError =
-    | InvalidVariableString
-    | AssginmentExpressionExpected
-    | VariableAlreadyDefined
-    | InvalidAssignment
-    | InvalidBracesCount
-    | NotAConstantExpression
-    | InvalidNumberFormat
-    | InvalidExpression
   type Error =
     class
       new : l:int * m:string -> Error
@@ -118,11 +117,10 @@ namespace mc.fpga.parser
     | Errors of Error []
   module Interpreter = begin
     val enc : s:string -> string
-    val ProcessContstant : c:ConstantOperation -> ConstantProcessingResult
     val ParseVariabe : s:ParsingResult<string> * b:bool -> ParsingResult<Field>
     val ParseVariabeP : s:ParsingResult<string> -> ParsingResult<Field>
     val Parse : s:string * size:int -> string [] * Error []
-    val CompileCS : code:string * mainclass:string -> CompilationResult
+    val CompileCS : code:string -> CompilationResult
     val InterpreteFPGAL :
       code:string * size:int -> string * InterpretationResult
   end

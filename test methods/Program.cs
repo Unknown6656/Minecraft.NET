@@ -34,8 +34,9 @@ $2 = tmp1 ^ tmp2
                 int[] fpga_pins = new int[pincount] { 0, 1, 0, 1, 0, 1, 0, 1 };
 
                 Console.WriteLine(string.Join(", ", fpga_pins)); // `BEFORE` STATE
-                nfo.Invoke(null, new object[] { fpga_pins }); // TEST ACTUAL METHOD
+                int res = (int)nfo.Invoke(null, new object[] { fpga_pins }); // TEST ACTUAL METHOD
                 Console.WriteLine(string.Join(", ", fpga_pins)); // `AFTER` STATE
+                Console.WriteLine("Return code: " + res);
             }
         }
     }
